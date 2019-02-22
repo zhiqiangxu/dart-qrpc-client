@@ -1,6 +1,10 @@
+import 'dart:typed_data';
+
 import 'package:qrpc_client/qrpc_client.dart';
 import 'package:test/test.dart';
 import 'dart:convert';
+import 'package:socket_io/socket_io.dart';
+
 
 void main() {
   group('A group of tests', () {
@@ -19,14 +23,16 @@ void main() {
       expect(ok, isTrue);
     });
 
-    test('binary', () async {
-      String s = "中国人";
-      var result = utf8.encode(s);
-      for (int i = 0; i < result.length; i++) {
-        print(result[i]);
-      }
-      print(result.length);
-      expect(true, isTrue);
+    test('login qchat', () async {
+      var loginReq = {"app":"qchat_client", "device":"mac", "token":"xu"};
+      var payLoadStr = json.encode(loginReq);
+      print(payLoadStr);
+      print(payLoadStr.length);
+      Uint8List payload = Uint8List.fromList(utf8.encode(payLoadStr));
+      print(payload.length);
+      var resp = await awesome.request(0, 0, payload);
+      
+      print(utf8.decode(resp.payload));
     });
   });
 }

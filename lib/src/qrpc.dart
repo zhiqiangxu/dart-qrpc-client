@@ -18,15 +18,11 @@ class QrpcConnectionConfig  {
 class QrpcFrame {
 	int requestID;
 	int flags;  
-	int       Cmd;
-	Uint8List Payload;
+	int cmd;
+	Uint8List payload;
+
+  QrpcFrame({this.requestID, this.flags, this.cmd, this.payload});
+  
+  bool get isPushed => flags & QrpcPushFlag != 0;
 }
 
-class QrpcResponse {
-  final int requestID;
-  QrpcResponse({this.requestID}) {
-    this.respFuture = Future<QrpcFrame>.value();
-    
-  }
-  Future<QrpcFrame> respFuture;
-}

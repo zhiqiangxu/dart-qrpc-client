@@ -6,30 +6,63 @@ import 'dart:typed_data';
 import 'dart:convert';
 import 'dart:math';
 import 'qrpc.dart';
+import 'qrpc_frame_reader.dart';
 
 
-
+typedef SubFunc(QrpcConnection, QrpcFrame);
 
 /// Checks if you are awesome. Spoiler: you are.
 class QrpcConnection {
-  QrpcConnection({this.addr, this.port, this.conf}) {
-    this.rng = new Random();
+  QrpcConnection({this.addr, this.port, this.conf, this.f}) {
+    rng = new Random();
+    reader = new QrpcFrameReader();
+    respes = new Map<int, Completer<QrpcFrame>>();
   }
 
   final QrpcConnectionConfig conf;
   final String addr;
   final int port;
   Random rng;
+  QrpcFrameReader reader;
+  SubFunc f;
   
-  Map<int, QrpcResponse> respes;
+  Map<int, Completer<QrpcFrame>> respes;
   Socket sock;
 
   bool get isAwesome => true;
 
   Future<bool> connect() async {
+    
+    if (this.sock != null) return true;
+
     try {
       Socket sock = await Socket.connect(this.addr, this.port, timeout: conf.dialTimeout);
       this.sock = sock;
+      sock.listen((List<int> data) {
+          print('Got $data size ${data.length}');
+          
+          this.reader.add(data);
+          while (true) {
+            var frame = reader.get();
+            if (frame == null) break;
+            if (frame.isPushed) {
+              if (f != null) {
+                f(this, frame);
+              } else {
+                print("pushed msg ignored");
+              }
+              continue;
+            }
+            if (this.respes.containsKey(frame.requestID)) {
+              this.respes[frame.requestID].complete(frame);
+            }
+          }
+          
+          
+        }, 
+        onError: (e) { print('Got error $e');this.close(); },
+        onDone: () { print('Done');this.close(); }
+      );
       return true;
     } catch (e) {
       print(e);
@@ -37,17 +70,28 @@ class QrpcConnection {
     }
   }
 
+  void close() {
+    if (this.sock == null) return;
+    this.sock.close();
+    this.respes.forEach((requestID,c) {
+      c.completeError("closed");
+    });
+    this.sock = null;
+  }
   
-  Future<QrpcResponse> request(int cmd, int flags, Uint8List payload) async {
+  Future<QrpcFrame> request(int cmd, int flags, Uint8List payload) async {
+
+    bool connected = await connect();
+    if (!connected) throw("connection failed");
 
     bool ok = false;
-    QrpcResponse resp;
+    int requestID;
+    final c = new Completer<QrpcFrame>();
     for (int i = 0; i < 3; i++) {
-      int requestID = this.rng.nextInt(2^64-1);
+      requestID = this.rng.nextInt(2^64-1);
       if (!this.respes.containsKey(requestID)) {
         ok = true;
-        resp = new QrpcResponse(requestID:requestID);
-        this.respes[requestID] = resp;
+        this.respes[requestID] = c;
         break;
       }
     }
@@ -64,24 +108,32 @@ class QrpcConnection {
     sizeBytes[3] = size;
     this.sock.add(sizeBytes);
 
-    int requestID = resp.requestID;
     var requestIDBytes = new Uint8List(8);
-    sizeBytes[0] = requestID >> 56;
-    sizeBytes[1] = requestID >> 48;
-    sizeBytes[2] = requestID >> 40;
-    sizeBytes[3] = requestID >> 32;
-    sizeBytes[4] = requestID >> 24;
-    sizeBytes[5] = requestID >> 16;
-    sizeBytes[6] = requestID >> 8;
-    sizeBytes[7] = requestID;
+    requestIDBytes[0] = requestID >> 56;
+    requestIDBytes[1] = requestID >> 48;
+    requestIDBytes[2] = requestID >> 40;
+    requestIDBytes[3] = requestID >> 32;
+    requestIDBytes[4] = requestID >> 24;
+    requestIDBytes[5] = requestID >> 16;
+    requestIDBytes[6] = requestID >> 8;
+    requestIDBytes[7] = requestID;
     this.sock.add(requestIDBytes);
+
+    var cmdBytes = new Uint8List(4);
+    cmdBytes[0] = flags;
+    cmdBytes[1] = cmd >> 16;
+    cmdBytes[2] = cmd >> 8;
+    cmdBytes[3] = cmd;
+    this.sock.add(cmdBytes);
 
     
     this.sock.add(payload);
 
     await this.sock.flush();
 
-    return resp;
+    // new StreamTransformer.fromHandlers(handleData: null);
+    // this.sock.transform().listen(null);
+    return c.future;
   }
 }
 
