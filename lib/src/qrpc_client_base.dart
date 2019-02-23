@@ -10,10 +10,11 @@ import 'qrpc_frame_reader.dart';
 
 
 typedef void SubFunc(QrpcConnection conn, QrpcFrame frame);
+typedef void CloseFunc(QrpcConnection conn);
 
 /// Checks if you are awesome. Spoiler: you are.
 class QrpcConnection {
-  QrpcConnection({this.addr, this.port, this.conf, this.sub}) {
+  QrpcConnection({this.addr, this.port, this.conf, this.sub, this.closecb}) {
     rng = new Random();
     reader = new QrpcFrameReader();
     respes = new Map<int, Completer<QrpcFrame>>();
@@ -25,6 +26,7 @@ class QrpcConnection {
   Random rng;
   QrpcFrameReader reader;
   SubFunc sub;
+  CloseFunc closecb;
   
   Map<int, Completer<QrpcFrame>> respes;
   Socket sock;
@@ -82,6 +84,7 @@ class QrpcConnection {
       c.completeError("closed");
     });
     this.sock = null;
+    if (this.closecb != null) this.closecb(this);
   }
   
   Future<QrpcFrame> request(int cmd, int flags, Uint8List payload) async {
