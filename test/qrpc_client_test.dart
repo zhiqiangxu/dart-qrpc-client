@@ -30,9 +30,9 @@ void main() {
       var payloadStr = json.encode(loginReq);
       print(payloadStr);
       print(payloadStr.length);
-      Uint8List payload = Uint8List.fromList(utf8.encode(payloadStr));
+      Uint8List payload = utf8.encode(payloadStr);
       print(payload.length);
-      var resp = await awesome.request(0, 0, payload);
+      var resp = await awesome.request(0, 0, utf8.encode(payloadStr));
       
       print(utf8.decode(resp.payload));
       
