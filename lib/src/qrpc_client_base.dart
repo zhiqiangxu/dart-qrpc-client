@@ -89,8 +89,7 @@ class QrpcConnection {
   
   Future<QrpcFrame> request(int cmd, int flags, Uint8List payload) async {
 
-    bool connected = await connect();
-    if (!connected) throw("connection failed");
+    if (sock == null) throw("not connected");
 
     bool ok = false;
     int requestID;
