@@ -9,11 +9,11 @@ import 'qrpc.dart';
 import 'qrpc_frame_reader.dart';
 
 
-typedef SubFunc(QrpcConnection, QrpcFrame);
+typedef void SubFunc(QrpcConnection conn, QrpcFrame frame);
 
 /// Checks if you are awesome. Spoiler: you are.
 class QrpcConnection {
-  QrpcConnection({this.addr, this.port, this.conf, this.f}) {
+  QrpcConnection({this.addr, this.port, this.conf, this.sub}) {
     rng = new Random();
     reader = new QrpcFrameReader();
     respes = new Map<int, Completer<QrpcFrame>>();
@@ -24,7 +24,7 @@ class QrpcConnection {
   final int port;
   Random rng;
   QrpcFrameReader reader;
-  SubFunc f;
+  SubFunc sub;
   
   Map<int, Completer<QrpcFrame>> respes;
   Socket sock;
@@ -39,15 +39,19 @@ class QrpcConnection {
       Socket sock = await Socket.connect(this.addr, this.port, timeout: conf.dialTimeout);
       this.sock = sock;
       sock.listen((List<int> data) {
-          print('Got $data size ${data.length}');
+          // print('Got $data size ${data.length}');
           
-          this.reader.add(data);
+          if (!this.reader.add(data)) {
+            print("add fail, close");
+            close();
+            return;
+          }
           while (true) {
-            var frame = reader.get();
+            var frame = reader.take();
             if (frame == null) break;
             if (frame.isPushed) {
-              if (f != null) {
-                f(this, frame);
+              if (sub != null) {
+                sub(this, frame);
               } else {
                 print("pushed msg ignored");
               }
@@ -55,6 +59,7 @@ class QrpcConnection {
             }
             if (this.respes.containsKey(frame.requestID)) {
               this.respes[frame.requestID].complete(frame);
+              this.respes.remove(frame.requestID);
             }
           }
           
@@ -88,7 +93,7 @@ class QrpcConnection {
     int requestID;
     final c = new Completer<QrpcFrame>();
     for (int i = 0; i < 3; i++) {
-      requestID = this.rng.nextInt(2^64-1);
+      requestID = this.rng.nextInt(1<<32);
       if (!this.respes.containsKey(requestID)) {
         ok = true;
         this.respes[requestID] = c;
@@ -108,6 +113,7 @@ class QrpcConnection {
     sizeBytes[3] = size;
     this.sock.add(sizeBytes);
 
+    print("requestID $requestID");
     var requestIDBytes = new Uint8List(8);
     requestIDBytes[0] = requestID >> 56;
     requestIDBytes[1] = requestID >> 48;
