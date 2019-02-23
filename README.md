@@ -8,15 +8,20 @@ Created from templates made available by Stagehand under a BSD-style
 A simple usage example:
 
 ```dart
-import 'package:qrpc_client/qrpc_client.dart';
+SubFunc sub = (QrpcConnection conn, QrpcFrame frame) {
+  print('pushed ${frame.payload}');
+};
+QrpcConnectionConfig conf = new QrpcConnectionConfig(dialTimeout: new Duration(seconds: 1));
+var awesome = new QrpcConnection(addr:"localhost", port:8888, conf:conf, sub:sub);
 
-main() {
-  var awesome = new Awesome();
-}
+var loginReq = {"app":"app", "device":"mac", "token":"cs1"};
+var payloadStr = json.encode(loginReq);
+Uint8List payload = utf8.encode(payloadStr);
+var resp = await awesome.request(0, 0, payload);
 ```
 
 ## Features and bugs
 
 Please file feature requests and bugs at the [issue tracker][tracker].
 
-[tracker]: http://example.com/issues/replaceme
+[tracker]: https://github.com/zhiqiangxu/dart-qrpc-client/issues
