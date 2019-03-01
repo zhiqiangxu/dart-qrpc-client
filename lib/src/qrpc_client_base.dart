@@ -1,9 +1,7 @@
-// TODO: Put public facing types in this file.
 import 'dart:io';
 import 'dart:async';
 
 import 'dart:typed_data';
-import 'dart:convert';
 import 'dart:math';
 import 'qrpc.dart';
 import 'qrpc_frame_reader.dart';
@@ -15,41 +13,41 @@ typedef void CloseFunc(QrpcConnection conn);
 /// Checks if you are awesome. Spoiler: you are.
 class QrpcConnection {
   QrpcConnection({this.addr, this.port, this.conf, this.sub, this.closecb}) {
-    rng = new Random();
-    reader = new QrpcFrameReader();
-    respes = new Map<int, Completer<QrpcFrame>>();
+    _rng = new Random();
+    _reader = new QrpcFrameReader();
+    _respes = new Map<int, Completer<QrpcFrame>>();
   }
 
   final QrpcConnectionConfig conf;
   final String addr;
   final int port;
-  Random rng;
-  QrpcFrameReader reader;
+  Random _rng;
+  QrpcFrameReader _reader;
   SubFunc sub;
   CloseFunc closecb;
   
-  Map<int, Completer<QrpcFrame>> respes;
-  Socket sock;
+  Map<int, Completer<QrpcFrame>> _respes;
+  Socket _sock;
 
   bool get isAwesome => true;
 
   Future<bool> connect() async {
     
-    if (this.sock != null) return true;
+    if (this._sock != null) return true;
 
     try {
       Socket sock = await Socket.connect(this.addr, this.port, timeout: conf.dialTimeout);
-      this.sock = sock;
+      this._sock = sock;
       sock.listen((List<int> data) {
           // print('Got $data size ${data.length}');
           
-          if (!this.reader.add(data)) {
+          if (!this._reader.add(data)) {
             print("add fail, close");
             close();
             return;
           }
           while (true) {
-            var frame = reader.take();
+            var frame = _reader.take();
             if (frame == null) break;
             if (frame.isPushed) {
               if (sub != null) {
@@ -59,9 +57,9 @@ class QrpcConnection {
               }
               continue;
             }
-            if (this.respes.containsKey(frame.requestID)) {
-              this.respes[frame.requestID].complete(frame);
-              this.respes.remove(frame.requestID);
+            if (this._respes.containsKey(frame.requestID)) {
+              this._respes[frame.requestID].complete(frame);
+              this._respes.remove(frame.requestID);
             }
           }
           
@@ -78,27 +76,27 @@ class QrpcConnection {
   }
 
   void close() {
-    if (this.sock == null) return;
-    this.sock.close();
-    this.respes.forEach((requestID,c) {
+    if (this._sock == null) return;
+    this._sock.close();
+    this._respes.forEach((requestID,c) {
       c.completeError("closed");
     });
-    this.sock = null;
+    this._sock = null;
     if (this.closecb != null) this.closecb(this);
   }
   
   Future<QrpcFrame> request(int cmd, int flags, Uint8List payload) async {
 
-    if (sock == null) throw("not connected");
+    if (_sock == null) throw("not connected");
 
     bool ok = false;
     int requestID;
     final c = new Completer<QrpcFrame>();
     for (int i = 0; i < 3; i++) {
-      requestID = this.rng.nextInt(1<<32);
-      if (!this.respes.containsKey(requestID)) {
+      requestID = this._rng.nextInt(1<<32);
+      if (!this._respes.containsKey(requestID)) {
         ok = true;
-        this.respes[requestID] = c;
+        this._respes[requestID] = c;
         break;
       }
     }
@@ -113,7 +111,7 @@ class QrpcConnection {
     sizeBytes[1] = size >> 16;
     sizeBytes[2] = size >> 8;
     sizeBytes[3] = size;
-    this.sock.add(sizeBytes);
+    this._sock.add(sizeBytes);
 
     // print("requestID $requestID");
     var requestIDBytes = new Uint8List(8);
@@ -125,19 +123,19 @@ class QrpcConnection {
     requestIDBytes[5] = requestID >> 16;
     requestIDBytes[6] = requestID >> 8;
     requestIDBytes[7] = requestID;
-    this.sock.add(requestIDBytes);
+    this._sock.add(requestIDBytes);
 
     var cmdBytes = new Uint8List(4);
     cmdBytes[0] = flags;
     cmdBytes[1] = cmd >> 16;
     cmdBytes[2] = cmd >> 8;
     cmdBytes[3] = cmd;
-    this.sock.add(cmdBytes);
+    this._sock.add(cmdBytes);
 
     
-    this.sock.add(payload);
+    this._sock.add(payload);
 
-    await this.sock.flush();
+    await this._sock.flush();
 
     // new StreamTransformer.fromHandlers(handleData: null);
     // this.sock.transform().listen(null);

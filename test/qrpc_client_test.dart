@@ -26,6 +26,7 @@ void main() {
     });
 
     test('login qchat', () async {
+      await awesome.connect();
       var loginReq = {"app":"app", "device":"mac", "token":"cs1"};
       var payloadStr = json.encode(loginReq);
       print(payloadStr);
